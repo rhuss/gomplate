@@ -3,6 +3,8 @@ package vault
 import (
 	"fmt"
 	"os"
+
+	"github.com/blang/vfs"
 )
 
 // UserPassAuthStrategy - an AuthStrategy that uses Vault's userpass authentication backend.
@@ -14,9 +16,16 @@ type UserPassAuthStrategy struct {
 
 // NewUserPassAuthStrategy - create an AuthStrategy that uses Vault's userpass auth
 // backend.
-func NewUserPassAuthStrategy() *UserPassAuthStrategy {
-	username := os.Getenv("VAULT_AUTH_USERNAME")
-	password := os.Getenv("VAULT_AUTH_PASSWORD")
+func NewUserPassAuthStrategy(fsOverrides ...vfs.Filesystem) *UserPassAuthStrategy {
+	var fs vfs.Filesystem
+	if len(fsOverrides) == 0 {
+		fs = vfs.OS()
+	} else {
+		fs = fsOverrides[0]
+	}
+
+	username := GetValue("VAULT_AUTH_USERNAME", fs)
+	password := GetValue("VAULT_AUTH_PASSWORD", fs)
 	mount := os.Getenv("VAULT_AUTH_USERPASS_MOUNT")
 	if mount == "" {
 		mount = "userpass"

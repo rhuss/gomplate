@@ -3,6 +3,8 @@ package vault
 import (
 	"fmt"
 	"os"
+
+	"github.com/blang/vfs"
 )
 
 // AppRoleAuthStrategy - an AuthStrategy that uses Vault's approle authentication backend.
@@ -14,9 +16,16 @@ type AppRoleAuthStrategy struct {
 
 // NewAppRoleAuthStrategy - create an AuthStrategy that uses Vault's approle auth
 // backend.
-func NewAppRoleAuthStrategy() *AppRoleAuthStrategy {
-	roleID := os.Getenv("VAULT_ROLE_ID")
-	secretID := os.Getenv("VAULT_SECRET_ID")
+func NewAppRoleAuthStrategy(fsOverrides ...vfs.Filesystem) *AppRoleAuthStrategy {
+	var fs vfs.Filesystem
+	if len(fsOverrides) == 0 {
+		fs = vfs.OS()
+	} else {
+		fs = fsOverrides[0]
+	}
+
+	roleID := GetValue("VAULT_ROLE_ID", fs)
+	secretID := GetValue("VAULT_SECRET_ID", fs)
 	mount := os.Getenv("VAULT_AUTH_APPROLE_MOUNT")
 	if mount == "" {
 		mount = "approle"

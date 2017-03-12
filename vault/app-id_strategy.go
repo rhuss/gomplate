@@ -3,6 +3,8 @@ package vault
 import (
 	"fmt"
 	"os"
+
+	"github.com/blang/vfs"
 )
 
 // AppIDAuthStrategy - an AuthStrategy that uses Vault's app-id authentication backend.
@@ -14,9 +16,16 @@ type AppIDAuthStrategy struct {
 
 // NewAppIDAuthStrategy - create an AuthStrategy that uses Vault's app-id auth
 // backend.
-func NewAppIDAuthStrategy() *AppIDAuthStrategy {
-	appID := os.Getenv("VAULT_APP_ID")
-	userID := os.Getenv("VAULT_USER_ID")
+func NewAppIDAuthStrategy(fsOverrides ...vfs.Filesystem) *AppIDAuthStrategy {
+	var fs vfs.Filesystem
+	if len(fsOverrides) == 0 {
+		fs = vfs.OS()
+	} else {
+		fs = fsOverrides[0]
+	}
+
+	appID := GetValue("VAULT_APP_ID", fs)
+	userID := GetValue("VAULT_USER_ID", fs)
 	mount := os.Getenv("VAULT_AUTH_APP_ID_MOUNT")
 	if mount == "" {
 		mount = "app-id"
