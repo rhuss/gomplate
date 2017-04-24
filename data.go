@@ -69,13 +69,15 @@ func NewData(datasourceArgs []string, headerArgs []string) *Data {
 	sources := make(map[string]*Source)
 	headers := parseHeaderArgs(headerArgs)
 	for _, v := range datasourceArgs {
-		s, err := ParseSource(v)
-		if err != nil {
-			log.Fatalf("error parsing datasource %v", err)
-			return nil
+		for _, arg := range fanOutDatasourceArgs(v) {
+			s, err := ParseSource(arg)
+			if err != nil {
+				log.Fatalf("error parsing datasource %s: %v", arg, err)
+				return nil
+			}
+			s.Header = headers[s.Alias]
+			sources[s.Alias] = s
 		}
-		s.Header = headers[s.Alias]
-		sources[s.Alias] = s
 	}
 	return &Data{
 		Sources:  sources,
@@ -132,13 +134,13 @@ func ParseSource(value string) (*Source, error) {
 	)
 	parts := strings.SplitN(value, "=", 2)
 	if len(parts) == 1 {
-		f := parts[0]
-		alias = strings.SplitN(value, ".", 2)[0]
-		if path.Base(f) != f {
-			err := fmt.Errorf("Invalid datasource (%s). Must provide an alias with files not in working directory", value)
+		srcURL = absURL(value)
+		if srcURL.Scheme == "file" {
+			alias = strings.SplitN(path.Base(value), ".", 2)[0]
+		} else {
+			err := fmt.Errorf("Invalid datasource (%s). Must provide an alias name for non-file datasources", value)
 			return nil, err
 		}
-		srcURL = absURL(f)
 	} else if len(parts) == 2 {
 		alias = parts[0]
 		var err error
@@ -157,6 +159,14 @@ func ParseSource(value string) (*Source, error) {
 }
 
 func absURL(value string) *url.URL {
+	parsedURL, err := url.Parse(value)
+	if err != nil || parsedURL.Scheme == "" || !parsedURL.IsAbs() {
+		return fileToURL(value)
+	}
+	return parsedURL
+}
+
+func fileToURL(path string) *url.URL {
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatalf("Can't get working directory: %s", err)
@@ -166,7 +176,7 @@ func absURL(value string) *url.URL {
 		Path:   cwd + "/",
 	}
 	relURL := &url.URL{
-		Path: value,
+		Path: path,
 	}
 	return baseURL.ResolveReference(relURL)
 }
@@ -300,6 +310,26 @@ func calcCacheKey(source *Source, args []string) cacheKey {
 		key += v
 	}
 	return cacheKey(key)
+}
+
+// If argument is a plain directory, use dir contents as datasource files
+func fanOutDatasourceArgs(arg string) []string {
+	if _, err := statDir(arg); err == nil {
+		files, err := ioutil.ReadDir(arg)
+		if err != nil {
+			log.Fatalf("error parsing datasource directory %s %v", arg, err)
+			return nil
+		}
+
+		var paths []string
+		for _, file := range files {
+			if !file.IsDir() {
+				paths = append(paths, path.Join(arg, file.Name()))
+			}
+		}
+		return paths
+	}
+	return []string{arg}
 }
 
 func readFile(source *Source, args ...string) ([]byte, error) {
