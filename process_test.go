@@ -7,25 +7,29 @@ import (
 
 	"path/filepath"
 
-	"log"
-
 	"path"
 
 	"github.com/stretchr/testify/assert"
 )
 
-func TestDatasourceDir(t *testing.T) {
+func TestDatasourceDirSerial(t *testing.T) {
+	fileTest(t, false, serialProcessor{})
+}
+
+func TestDatasourceDirParallel(t *testing.T) {
+	fileTest(t, true, parallelProcessor{})
+}
+
+func fileTest(t *testing.T, parallel bool, p processor) {
 	outDir, err := ioutil.TempDir("test/files/datasource-dir", "out-temp-")
 	assert.Nil(t, err)
-	defer (func() {
-		if cerr := os.RemoveAll(outDir); cerr != nil {
-			log.Fatalf("Error while removing temporary directory %s : %v", outDir, cerr)
-		}
-	})()
+	// nolint: errcheck
+	defer os.RemoveAll(outDir)
 
 	data := NewData([]string{"test/files/datasource-dir/ds"}, []string{})
+	data.parallel = parallel
 	gomplate := NewGomplate(data, "{{", "}}")
-	err = processInputFiles(
+	err = p.processInputFiles(
 		"",
 		[]string{"test/files/datasource-dir/in/test.txt"},
 		[]string{path.Join(outDir, "out.txt")},
@@ -54,23 +58,30 @@ func TestReadInput(t *testing.T) {
 	assert.Equal(t, string(expected), actual[0])
 }
 
-func TestInputDir(t *testing.T) {
+func TestInputDirSerial(t *testing.T) {
+	inputDirTest(t, false, serialProcessor{})
+}
+
+func TestInputDirParallel(t *testing.T) {
+	inputDirTest(t, true, parallelProcessor{})
+}
+
+func inputDirTest(t *testing.T, parallel bool, p processor) {
 	outDir, err := ioutil.TempDir("test/files/input-dir", "out-temp-")
 	assert.Nil(t, err)
-	defer (func() {
-		if cerr := os.RemoveAll(outDir); cerr != nil {
-			log.Fatalf("Error while removing temporary directory %s : %v", outDir, cerr)
-		}
-	})()
+	// nolint: errcheck
+	defer os.RemoveAll(outDir)
 
 	src, err := ParseSource("config=test/files/input-dir/config.yml")
 	assert.Nil(t, err)
 
 	data := &Data{
-		Sources: map[string]*Source{"config": src},
+		Sources:  map[string]*Source{"config": src},
+		parallel: parallel,
 	}
 	gomplate := NewGomplate(data, "{{", "}}")
-	err = processInputDir("test/files/input-dir/in", outDir, gomplate)
+
+	err = p.processInputDir("test/files/input-dir/in", outDir, gomplate)
 	assert.Nil(t, err)
 
 	top, err := ioutil.ReadFile(filepath.Join(outDir, "top.txt"))
